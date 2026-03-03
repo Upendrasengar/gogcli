@@ -583,6 +583,11 @@ gog gmail send --to a@b.com --subject "Hi" --body-file -   # Read body from stdi
 gog gmail send --to a@b.com --subject "Hi" --body "Plain fallback" --body-html "<p>Hello</p>"
 # Reply + include quoted original message (auto-generates HTML quote unless you pass --body-html)
 gog gmail send --reply-to-message-id <messageId> --quote --to a@b.com --subject "Re: Hi" --body "My reply"
+# Draft reply + quote (create requires explicit reply target)
+gog gmail drafts create --reply-to-message-id <messageId> --quote --subject "Re: Hi" --body "My reply"
+# Draft reply + quote (update accepts explicit target; else falls back to latest non-draft, non-self message in thread)
+gog gmail drafts update <draftId> --reply-to-message-id <messageId> --quote --subject "Re: Hi" --body "My reply"
+gog gmail drafts update <draftId> --quote --subject "Re: Hi" --body "My reply"
 gog gmail drafts list
 gog gmail drafts create --subject "Draft" --body "Body"
 gog gmail drafts create --to a@b.com --subject "Draft" --body "Body"
