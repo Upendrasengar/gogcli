@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/99designs/keyring"
@@ -50,6 +51,21 @@ func tokenSourceForAccount(ctx context.Context, service googleauth.Service, emai
 }
 
 func tokenSourceForAccountScopes(ctx context.Context, serviceLabel string, email string, client string, clientID string, clientSecret string, requiredScopes []string) (oauth2.TokenSource, error) {
+	// Proxy mode: skip local credentials entirely.
+	// When GOG_TOKEN_PROXY_URL is set, fetch access tokens from the platform
+	// proxy instead of using local client_id/secret + refresh_token.
+	if proxyURL := os.Getenv("GOG_TOKEN_PROXY_URL"); proxyURL != "" {
+		apiKey := os.Getenv("PROXY_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("GOG_TOKEN_PROXY_URL is set but PROXY_API_KEY is empty")
+		}
+		slog.Debug("using proxy token source", "proxyURL", proxyURL, "email", email)
+		return &proxyTokenSource{
+			proxyURL: proxyURL,
+			apiKey:   apiKey,
+		}, nil
+	}
+
 	var store secrets.Store
 
 	if s, err := openSecretsStore(); err != nil {
@@ -94,6 +110,25 @@ func optionsForAccount(ctx context.Context, service googleauth.Service, email st
 
 func optionsForAccountScopes(ctx context.Context, serviceLabel string, email string, scopes []string) ([]option.ClientOption, error) {
 	slog.Debug("creating client options with custom scopes", "serviceLabel", serviceLabel, "email", email)
+
+	// Proxy mode shortcut: skip all local credential resolution.
+	if proxyURL := os.Getenv("GOG_TOKEN_PROXY_URL"); proxyURL != "" {
+		apiKey := os.Getenv("PROXY_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("GOG_TOKEN_PROXY_URL is set but PROXY_API_KEY is empty")
+		}
+		ts := &proxyTokenSource{proxyURL: proxyURL, apiKey: apiKey}
+		baseTransport := newBaseTransport()
+		retryTransport := NewRetryTransport(&oauth2.Transport{
+			Source: ts,
+			Base:   baseTransport,
+		})
+		c := &http.Client{
+			Transport: retryTransport,
+			Timeout:   defaultHTTPTimeout,
+		}
+		return []option.ClientOption{option.WithHTTPClient(c)}, nil
+	}
 
 	var creds config.ClientCredentials
 
