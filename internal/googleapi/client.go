@@ -29,6 +29,21 @@ var (
 )
 
 func tokenSourceForAccount(ctx context.Context, service googleauth.Service, email string) (oauth2.TokenSource, error) {
+	// Proxy mode: skip ALL local credential resolution.
+	// Must be checked here (before readClientCredentials) because
+	// credentials.json won't exist on proxy-mode machines.
+	if proxyURL := os.Getenv("GOG_TOKEN_PROXY_URL"); proxyURL != "" {
+		apiKey := os.Getenv("PROXY_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("GOG_TOKEN_PROXY_URL is set but PROXY_API_KEY is empty")
+		}
+		slog.Debug("using proxy token source", "proxyURL", proxyURL, "email", email)
+		return &proxyTokenSource{
+			proxyURL: proxyURL,
+			apiKey:   apiKey,
+		}, nil
+	}
+
 	client, err := authclient.ResolveClient(ctx, email)
 	if err != nil {
 		return nil, fmt.Errorf("resolve client: %w", err)
